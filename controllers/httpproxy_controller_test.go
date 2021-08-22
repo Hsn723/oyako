@@ -5,13 +5,14 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
-	"reflect"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	contourv1 "github.com/projectcontour/contour/apis/projectcontour/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -66,23 +67,28 @@ func childProxyFromTemplate(namespace, name, parentNamespacedName, prefix string
 	return child
 }
 
-func parentHasExpectedInclude(ctx context.Context, parent *contourv1.HTTPProxy, expectedInclude contourv1.Include, namespace, name string) error {
-	err := k8sClient.Get(ctx, client.ObjectKey{
-		Namespace: namespace,
-		Name:      name,
-	}, parent)
-	Expect(err).NotTo(HaveOccurred())
+func parentHasExpectedInclude(ctx context.Context, namespace, name, childNamespace, childName, childPrefix string) error {
+	parent := &contourv1.HTTPProxy{}
+	key := client.ObjectKey{Namespace: namespace, Name: name}
+	err := k8sClient.Get(ctx, key, parent)
+	if err != nil {
+		return err
+	}
 
-	if !hasInclude(parent.Spec.Includes, expectedInclude) {
+	if !hasInclude(parent, childNamespace, childName, childPrefix) {
 		return fmt.Errorf("child is not included in parent")
 	}
 	return nil
 }
 
-func hasInclude(includes []contourv1.Include, include contourv1.Include) bool {
-	for _, i := range includes {
-		if reflect.DeepEqual(i, include) {
-			return true
+func hasInclude(parent *contourv1.HTTPProxy, namespace, name, prefix string) bool {
+	for _, i := range parent.Spec.Includes {
+		if i.Namespace == namespace && i.Name == name {
+			for _, cond := range i.Conditions {
+				if cond.Prefix == prefix {
+					return true
+				}
+			}
 		}
 	}
 	return false
@@ -104,8 +110,38 @@ func randomNames() (parentNamespace, parentName, childNamespace, childName, pref
 }
 
 var _ = Describe("HTTPProxy controller", func() {
-
+	var stopFunc func()
 	ctx := context.Background()
+	BeforeEach(func() {
+		k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
+			Scheme:             scheme,
+			LeaderElection:     false,
+			MetricsBindAddress: "0",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		reconciler := &HTTPProxyReconciler{
+			Client: k8sManager.GetClient(),
+			Scheme: k8sManager.GetScheme(),
+			Log:    ctrl.Log.WithName("controllers").WithName("HTTPProxy"),
+		}
+		Expect(reconciler.SetupWithManager(k8sManager)).To(Succeed())
+
+		ctx, cancel := context.WithCancel(ctx)
+		stopFunc = cancel
+		go func() {
+			err := k8sManager.Start(ctx)
+			if err != nil {
+				panic(err)
+			}
+		}()
+		time.Sleep(100 * time.Millisecond)
+	})
+
+	AfterEach(func() {
+		stopFunc()
+		time.Sleep(100 * time.Millisecond)
+	})
+
 	Context("When creating child HTTPProxy", func() {
 		It("Should update the parent HTTPProxy", func() {
 			By("creating namespaces")
@@ -127,16 +163,10 @@ var _ = Describe("HTTPProxy controller", func() {
 			Expect(k8sClient.Create(ctx, child)).To(Succeed())
 
 			By("getting parent")
-			expectedInclude := contourv1.Include{
-				Namespace: child.Namespace,
-				Name:      child.Name,
-				Conditions: []contourv1.MatchCondition{
-					{
-						Prefix: prefix,
-					},
-				},
-			}
-			Eventually(parentHasExpectedInclude(ctx, parent, expectedInclude, parentNamespace, parentName)).Should(Succeed())
+			time.Sleep(time.Second)
+			Eventually(func() error {
+				return parentHasExpectedInclude(ctx, parentNamespace, parentName, childNamespace, childName, prefix)
+			}).Should(Succeed())
 		})
 
 		It("Should update the parent HTTPProxy with default prefix", func() {
@@ -159,16 +189,11 @@ var _ = Describe("HTTPProxy controller", func() {
 			Expect(k8sClient.Create(ctx, child)).To(Succeed())
 
 			By("getting parent")
-			expectedInclude := contourv1.Include{
-				Namespace: child.Namespace,
-				Name:      child.Name,
-				Conditions: []contourv1.MatchCondition{
-					{
-						Prefix: fmt.Sprintf("/%s", childName),
-					},
-				},
-			}
-			Eventually(parentHasExpectedInclude(ctx, parent, expectedInclude, parentNamespace, parentName)).Should(Succeed())
+			time.Sleep(time.Second)
+			prefix := fmt.Sprintf("/%s", childName)
+			Eventually(func() error {
+				return parentHasExpectedInclude(ctx, parentNamespace, parentName, childNamespace, childName, prefix)
+			}).Should(Succeed())
 		})
 
 		It("Should update the parent's existing include", func() {
@@ -191,16 +216,10 @@ var _ = Describe("HTTPProxy controller", func() {
 			Expect(k8sClient.Create(ctx, child)).To(Succeed())
 
 			By("getting parent")
-			expectedInclude := contourv1.Include{
-				Namespace: child.Namespace,
-				Name:      child.Name,
-				Conditions: []contourv1.MatchCondition{
-					{
-						Prefix: prefix,
-					},
-				},
-			}
-			Eventually(parentHasExpectedInclude(ctx, parent, expectedInclude, parentNamespace, parentName)).Should(Succeed())
+			time.Sleep(time.Second)
+			Eventually(func() error {
+				return parentHasExpectedInclude(ctx, parentNamespace, parentName, childNamespace, childName, prefix)
+			}).Should(Succeed())
 
 			By("updating prefix")
 			Expect(k8sClient.Get(ctx, client.ObjectKey{
@@ -210,12 +229,12 @@ var _ = Describe("HTTPProxy controller", func() {
 			newPrefix := fmt.Sprintf("/%s", randomSuffix())
 			child.Annotations[pathPrefixAnnotation] = newPrefix
 			Expect(k8sClient.Update(ctx, child)).To(Succeed())
-			expectedInclude.Conditions =  []contourv1.MatchCondition{
-				{
-					Prefix: newPrefix,
-				},
-			}
-			Eventually(parentHasExpectedInclude(ctx, parent, expectedInclude, parentNamespace, parentName)).Should(Succeed())
+
+			By("getting parent")
+			time.Sleep(time.Second)
+			Eventually(func() error {
+				return parentHasExpectedInclude(ctx, parentNamespace, parentName, childNamespace, childName, newPrefix)
+			}).Should(Succeed())
 		})
 
 		It("Should not overwrite the parent's other includes", func() {
@@ -250,17 +269,11 @@ var _ = Describe("HTTPProxy controller", func() {
 			Expect(k8sClient.Create(ctx, child)).To(Succeed())
 
 			By("getting parent")
-			expectedInclude := contourv1.Include{
-				Namespace: child.Namespace,
-				Name:      child.Name,
-				Conditions: []contourv1.MatchCondition{
-					{
-						Prefix: prefix,
-					},
-				},
-			}
-			Expect(parentHasExpectedInclude(ctx, parent, includes[0], parentNamespace, parentName))
-			Eventually(parentHasExpectedInclude(ctx, parent, expectedInclude, parentNamespace, parentName)).Should(Succeed())
+			time.Sleep(time.Second)
+			Expect(parentHasExpectedInclude(ctx, parentNamespace, parentName, "hoge", "hoge", "/hoge"))
+			Eventually(func() error {
+				return parentHasExpectedInclude(ctx, parentNamespace, parentName, childNamespace, childName, prefix)
+			}).Should(Succeed())
 		})
 
 		It("Should not allow duplicate prefixes", func() {
@@ -278,8 +291,8 @@ var _ = Describe("HTTPProxy controller", func() {
 			parent := parentProxyFromTemplate(parentNamespace, parentName)
 			includes := []contourv1.Include{
 				{
-					Namespace:  "hoge",
-					Name:       "hoge",
+					Namespace: "hoge",
+					Name:      "hoge",
 					Conditions: []contourv1.MatchCondition{
 						{
 							Prefix: prefix,
@@ -295,57 +308,11 @@ var _ = Describe("HTTPProxy controller", func() {
 			Expect(k8sClient.Create(ctx, child)).To(Succeed())
 
 			By("getting parent")
-			expectedInclude := contourv1.Include{
-				Namespace:  child.Namespace,
-				Name:       child.Name,
-				Conditions: []contourv1.MatchCondition{
-					{
-						Prefix: prefix,
-					},
-				},
-			}
-			Expect(parentHasExpectedInclude(ctx, parent, includes[0], parentNamespace, parentName))
-			Consistently(parentHasExpectedInclude(ctx, parent, expectedInclude, parentNamespace, parentName)).ShouldNot(Succeed())
-		})
-
-		It("Should cleanup parent upon child's deletion", func() {
-			By("creating namespaces")
-			parentNamespace, parentName, childNamespace, childName, prefix := randomNames()
-
-			Expect(k8sClient.Create(ctx, &corev1.Namespace{
-				ObjectMeta: v1.ObjectMeta{Name: parentNamespace},
-			})).To(Succeed())
-			Expect(k8sClient.Create(ctx, &corev1.Namespace{
-				ObjectMeta: v1.ObjectMeta{Name: childNamespace},
-			})).To(Succeed())
-
-			By("creating parent")
-			parent := parentProxyFromTemplate(parentNamespace, parentName)
-			Expect(k8sClient.Create(ctx, parent)).To(Succeed())
-
-			By("creating child")
-			child := childProxyFromTemplate(childNamespace, childName, fmt.Sprintf("%s/%s", parentNamespace, parentName), prefix)
-			Expect(k8sClient.Create(ctx, child)).To(Succeed())
-
-			By("getting parent")
-			expectedInclude := contourv1.Include{
-				Namespace: child.Namespace,
-				Name:      child.Name,
-				Conditions: []contourv1.MatchCondition{
-					{
-						Prefix: prefix,
-					},
-				},
-			}
-			Eventually(parentHasExpectedInclude(ctx, parent, expectedInclude, parentNamespace, parentName)).Should(Succeed())
-
-			By("deleting child")
-			Expect(k8sClient.Get(ctx, client.ObjectKey{
-				Namespace: childNamespace,
-				Name:      childName,
-			}, child)).To(Succeed())
-			Expect(k8sClient.Delete(ctx, child)).To(Succeed())
-			Eventually(parentHasExpectedInclude(ctx, parent, expectedInclude, parentNamespace, parentName)).ShouldNot(Succeed())
+			time.Sleep(time.Second)
+			Expect(parentHasExpectedInclude(ctx, parentNamespace, parentName, "hoge", "hoge", prefix))
+			Consistently(func() error {
+				return parentHasExpectedInclude(ctx, parentNamespace, parentName, childNamespace, childName, prefix)
+			}).ShouldNot(Succeed())
 		})
 
 		It("Should not update non-existing parent", func() {
@@ -364,6 +331,7 @@ var _ = Describe("HTTPProxy controller", func() {
 			Expect(k8sClient.Create(ctx, child)).To(Succeed())
 
 			By("getting parent")
+			time.Sleep(time.Second)
 			Consistently(func() error {
 				parent := &contourv1.HTTPProxy{}
 				return k8sClient.Get(ctx, client.ObjectKey{
@@ -394,6 +362,7 @@ var _ = Describe("HTTPProxy controller", func() {
 			Expect(k8sClient.Create(ctx, child)).To(Succeed())
 
 			By("getting parent")
+			time.Sleep(time.Second)
 			Consistently(func() error {
 				err := k8sClient.Get(ctx, client.ObjectKey{
 					Namespace: parentNamespace,
@@ -405,6 +374,53 @@ var _ = Describe("HTTPProxy controller", func() {
 				}
 				return fmt.Errorf("parent should not have any includes")
 			}).Should(Succeed())
+		})
+	})
+
+	Context("When deleting child HTTPProxy", func() {
+		It("Should cleanup parent upon child's deletion", func() {
+			By("creating namespaces")
+			parentNamespace, parentName, childNamespace, childName, prefix := randomNames()
+
+			Expect(k8sClient.Create(ctx, &corev1.Namespace{
+				ObjectMeta: v1.ObjectMeta{Name: parentNamespace},
+			})).To(Succeed())
+			Expect(k8sClient.Create(ctx, &corev1.Namespace{
+				ObjectMeta: v1.ObjectMeta{Name: childNamespace},
+			})).To(Succeed())
+
+			By("creating parent")
+			parent := parentProxyFromTemplate(parentNamespace, parentName)
+			Expect(k8sClient.Create(ctx, parent)).To(Succeed())
+
+			By("creating child")
+			child := childProxyFromTemplate(childNamespace, childName, fmt.Sprintf("%s/%s", parentNamespace, parentName), prefix)
+			Expect(k8sClient.Create(ctx, child)).To(Succeed())
+
+			By("getting parent")
+			time.Sleep(time.Second)
+			Eventually(func() error {
+				return parentHasExpectedInclude(ctx, parentNamespace, parentName, childNamespace, childName, prefix)
+			}).Should(Succeed())
+
+			By("deleting child")
+			Expect(k8sClient.Get(ctx, client.ObjectKey{
+				Namespace: childNamespace,
+				Name:      childName,
+			}, child)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, child)).To(Succeed())
+
+			By("getting parent")
+			time.Sleep(time.Second)
+			Eventually(func() error {
+				return parentHasExpectedInclude(ctx, parentNamespace, parentName, childNamespace, childName, prefix)
+			}).ShouldNot(Succeed())
+			Eventually(func() error {
+				return k8sClient.Get(ctx, client.ObjectKey{
+					Namespace: childNamespace,
+					Name:      childName,
+				}, child)
+			}).ShouldNot(Succeed())
 		})
 	})
 })
