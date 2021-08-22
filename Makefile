@@ -51,6 +51,12 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
+.PHONY: lint
+lint:
+	if [ -z "$(shell which pre-commit)" ]; then pip3 install pre-commit; fi
+	pre-commit install
+	pre-commit run --all-files
+
 crds:
 	mkdir -p config/crd/third-party
 	curl -fsL -o config/crd/third-party/httpproxy.yml -sLf https://github.com/projectcontour/contour/raw/v$(CONTOUR_VERSION)/examples/contour/01-crds.yaml
