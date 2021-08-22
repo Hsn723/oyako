@@ -1,0 +1,30 @@
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - projectcontour.io
+  resources:
+  - httpproxies
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - projectcontour.io
+  resources:
+  - httpproxies/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - projectcontour.io
+  resources:
+  - httpproxies/status
+  verbs:
+  - get

@@ -1,0 +1,12 @@
+domain: atelierhsn.com
+layout:
+- go.kubebuilder.io/v3
+projectName: oyako
+repo: atelierhsn.com/oyako
+resources:
+- controller: true
+  domain: atelierhsn.com
+  group: projectcontour.io
+  kind: HTTPProxy
+  version: v1
+version: "3"
