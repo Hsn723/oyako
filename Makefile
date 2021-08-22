@@ -1,6 +1,6 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+IMG ?= ghcr.io/hsn723/oyako:latest
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
 CONTOUR_VERSION := 1.18.0
@@ -50,6 +50,12 @@ fmt: ## Run go fmt against code.
 
 vet: ## Run go vet against code.
 	go vet ./...
+
+.PHONY: lint
+lint:
+	if [ -z "$(shell which pre-commit)" ]; then pip3 install pre-commit; fi
+	pre-commit install
+	pre-commit run --all-files
 
 crds:
 	mkdir -p config/crd/third-party

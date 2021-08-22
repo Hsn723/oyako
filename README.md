@@ -1,5 +1,5 @@
 # oyako
-An inclusion controller for Contour HTTPProxy resources.
+An inclusion controller for [Contour][Contour] HTTPProxy resources.
 
 ## Motivation
 Contour's HTTPProxy comes with a feature called inclusion, where HTTPProxy objects can be included in another, forming a parent/child relationship. This is useful in situations where multiple teams share the same FQDN, but manage their own paths within it. The shared FQDN would reside in a root HTTPProxy that delegates paths to their respective teams via the `.spec.includes` block. Individual teams would manage their own paths, possibly delegating further child paths themselves. This would result in something similar to the example below:
@@ -70,3 +70,5 @@ The behavior of `oyako` is controlled via annotations on HTTPProxy objects.
 
 ## Limitations
 `oyako` only allows for inclusion via path prefixes, and will not assign the same prefix to multiple children.
+
+[Contour]: https://github.com/projectcontour/contour

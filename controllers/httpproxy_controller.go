@@ -26,7 +26,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -39,7 +38,7 @@ const (
 	finalizerName            = "oyako.atelierhsn.com/finalizer"
 )
 
-// HTTPProxyReconciler reconciles a HTTPProxy object
+// HTTPProxyReconciler reconciles a HTTPProxy object.
 type HTTPProxyReconciler struct {
 	client.Client
 	Log    logr.Logger
@@ -50,7 +49,7 @@ type HTTPProxyReconciler struct {
 // +kubebuilder:rbac:groups=projectcontour.io,resources=httpproxies/status,verbs=get
 // +kubebuilder:rbac:groups=projectcontour.io,resources=httpproxies/finalizers,verbs=update
 
-// Reconcile updates parent HTTPProxy objects
+// Reconcile updates parent HTTPProxy objects.
 func (r *HTTPProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("httpproxy", req.NamespacedName)
 
@@ -108,7 +107,7 @@ func (r *HTTPProxyReconciler) hasFinalizer(h *contourv1.HTTPProxy, finalizer str
 	return false
 }
 
-func (r *HTTPProxyReconciler) getParentProxy(ctx context.Context, parentRef string, log logr.Logger) (parent *contourv1.HTTPProxy, err error) {
+func (r *HTTPProxyReconciler) getParentProxy(ctx context.Context, parentRef string) (parent *contourv1.HTTPProxy, err error) {
 	namespacedName := strings.Split(parentRef, "/")
 	if len(namespacedName) != 2 {
 		return nil, fmt.Errorf("invalid parent %s", namespacedName)
@@ -117,6 +116,7 @@ func (r *HTTPProxyReconciler) getParentProxy(ctx context.Context, parentRef stri
 		Namespace: namespacedName[0],
 		Name:      namespacedName[1],
 	}
+	parent = &contourv1.HTTPProxy{}
 	err = r.Get(ctx, key, parent)
 	return
 }
@@ -146,7 +146,7 @@ func (r *HTTPProxyReconciler) findIncludeRef(includes []contourv1.Include, child
 
 func (r *HTTPProxyReconciler) cleanupParentProxy(ctx context.Context, childProxy *contourv1.HTTPProxy, log logr.Logger) error {
 	parentRef := childProxy.Annotations[parentRefAnnotation]
-	parentProxy, err := r.getParentProxy(ctx, parentRef, log)
+	parentProxy, err := r.getParentProxy(ctx, parentRef)
 	if err != nil {
 		return err
 	}
@@ -160,8 +160,7 @@ func (r *HTTPProxyReconciler) cleanupParentProxy(ctx context.Context, childProxy
 	}
 	includes = append(includes[:childIdx], includes[childIdx+1:]...)
 	parentProxy.Spec.Includes = includes
-	err = r.Patch(ctx, parentProxy, client.Apply, &client.PatchOptions{
-		Force:        pointer.BoolPtr(true),
+	err = r.Update(ctx, parentProxy, &client.UpdateOptions{
 		FieldManager: "oyako",
 	})
 	if err != nil {
@@ -173,7 +172,7 @@ func (r *HTTPProxyReconciler) cleanupParentProxy(ctx context.Context, childProxy
 
 func (r *HTTPProxyReconciler) reconcileParentProxy(ctx context.Context, childProxy *contourv1.HTTPProxy, log logr.Logger) error {
 	parentRef := childProxy.Annotations[parentRefAnnotation]
-	parentProxy, err := r.getParentProxy(ctx, parentRef, log)
+	parentProxy, err := r.getParentProxy(ctx, parentRef)
 	if err != nil {
 		return err
 	}
@@ -205,8 +204,8 @@ func (r *HTTPProxyReconciler) reconcileParentProxy(ctx context.Context, childPro
 		}
 		parentProxy.Spec.Includes = append(parentProxy.Spec.Includes, include)
 	}
-	err = r.Patch(ctx, parentProxy, client.Apply, &client.PatchOptions{
-		Force:        pointer.BoolPtr(true),
+	log.Info("patching parent")
+	err = r.Update(ctx, parentProxy, &client.UpdateOptions{
 		FieldManager: "oyako",
 	})
 	if err != nil {

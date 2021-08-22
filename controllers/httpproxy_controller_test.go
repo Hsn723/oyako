@@ -210,7 +210,7 @@ var _ = Describe("HTTPProxy controller", func() {
 			newPrefix := fmt.Sprintf("/%s", randomSuffix())
 			child.Annotations[pathPrefixAnnotation] = newPrefix
 			Expect(k8sClient.Update(ctx, child)).To(Succeed())
-			expectedInclude.Conditions =  []contourv1.MatchCondition{
+			expectedInclude.Conditions = []contourv1.MatchCondition{
 				{
 					Prefix: newPrefix,
 				},
@@ -278,8 +278,8 @@ var _ = Describe("HTTPProxy controller", func() {
 			parent := parentProxyFromTemplate(parentNamespace, parentName)
 			includes := []contourv1.Include{
 				{
-					Namespace:  "hoge",
-					Name:       "hoge",
+					Namespace: "hoge",
+					Name:      "hoge",
 					Conditions: []contourv1.MatchCondition{
 						{
 							Prefix: prefix,
@@ -296,8 +296,8 @@ var _ = Describe("HTTPProxy controller", func() {
 
 			By("getting parent")
 			expectedInclude := contourv1.Include{
-				Namespace:  child.Namespace,
-				Name:       child.Name,
+				Namespace: child.Namespace,
+				Name:      child.Name,
 				Conditions: []contourv1.MatchCondition{
 					{
 						Prefix: prefix,
