@@ -1,13 +1,21 @@
 linters:
+  disable-all: true
   enable:
-      - dupl
-      - gocognit
-      - goconst
-      - gocyclo
-      - godot
-      - gofmt
-      - revive
-      - typecheck
-      - unparam
+    - deadcode
+    - dupl
+    - errcheck
+    - gocognit
+    - goconst
+    - gocyclo
+    - godot
+    - gosimple
+    - gofmt
+    - ineffassign
+    - revive
+    - staticcheck
+    - structcheck
+    - unparam
+    - unused
+    - varcheck
 run:
   timeout: 5m
