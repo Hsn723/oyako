@@ -3,7 +3,7 @@
 IMG ?= ghcr.io/hsn723/oyako:latest
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
-CONTOUR_VERSION := 1.18.0
+CONTOUR_VERSION := $(shell awk '/github.com\/projectcontour\/contour/ {print $$2}' go.mod)
 KUBERNETES_VERSION := 1.21
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
@@ -59,7 +59,7 @@ lint:
 
 crds:
 	mkdir -p config/crd/third-party
-	curl -fsL -o config/crd/third-party/httpproxy.yml -sLf https://github.com/projectcontour/contour/raw/v$(CONTOUR_VERSION)/examples/contour/01-crds.yaml
+	curl -fsL -o config/crd/third-party/httpproxy.yml -sLf https://github.com/projectcontour/contour/raw/$(CONTOUR_VERSION)/examples/contour/01-crds.yaml
 
 test: manifests generate fmt vet crds setup-envtest ## Run tests.
 	source <($(SETUP_ENVTEST) use -p env $(KUBERNETES_VERSION)); \
