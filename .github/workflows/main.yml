@@ -20,14 +20,14 @@ jobs:
           go-version: ${{ matrix.go }}
       - name: Test
         run: make build
-  # lint:
-  #   name: Lint
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #     - uses: actions/setup-python@v2
-  #     - name: Lint
-  #       run: make lint
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+      - name: Lint
+        run: make lint
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -65,7 +65,7 @@ jobs:
   tag:
     name: Tag release
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-    needs: [build, test, dry-run]
+    needs: [build, lint, test, dry-run]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
