@@ -4,6 +4,7 @@ linters:
     - deadcode
     - dupl
     - errcheck
+    - forbidigo
     - gocognit
     - goconst
     - gocyclo
@@ -17,5 +18,9 @@ linters:
     - unparam
     - unused
     - varcheck
+linters-settings:
+  forbidigo:
+    forbid:
+      - '^fmt\.Errorf$'
 run:
   timeout: 5m

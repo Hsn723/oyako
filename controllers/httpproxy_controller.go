@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-logr/logr"
 	contourv1 "github.com/projectcontour/contour/apis/projectcontour/v1"
+	"golang.org/x/xerrors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -40,7 +41,7 @@ const (
 
 // HTTPProxyReconciler reconciles a HTTPProxy object.
 type HTTPProxyReconciler struct {
-	client.Client
+	Client client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
@@ -58,7 +59,7 @@ func (r *HTTPProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		Namespace: req.Namespace,
 		Name:      req.Name,
 	}
-	err := r.Get(ctx, key, httpProxy)
+	err := r.Client.Get(ctx, key, httpProxy)
 	if apierrors.IsNotFound(err) {
 		return ctrl.Result{}, nil
 	}
@@ -72,7 +73,7 @@ func (r *HTTPProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if httpProxy.ObjectMeta.DeletionTimestamp.IsZero() {
 		if !r.hasFinalizer(httpProxy, finalizerName) {
 			controllerutil.AddFinalizer(httpProxy, finalizerName)
-			if err := r.Update(ctx, httpProxy); err != nil {
+			if err := r.Client.Update(ctx, httpProxy); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
@@ -82,7 +83,7 @@ func (r *HTTPProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				return ctrl.Result{}, err
 			}
 			controllerutil.RemoveFinalizer(httpProxy, finalizerName)
-			if err := r.Update(ctx, httpProxy); err != nil {
+			if err := r.Client.Update(ctx, httpProxy); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
@@ -112,14 +113,14 @@ func (r *HTTPProxyReconciler) hasFinalizer(h *contourv1.HTTPProxy, finalizer str
 func (r *HTTPProxyReconciler) getParentProxy(ctx context.Context, parentRef string) (parent *contourv1.HTTPProxy, err error) {
 	namespacedName := strings.Split(parentRef, "/")
 	if len(namespacedName) != 2 {
-		return nil, fmt.Errorf("invalid parent %s", namespacedName)
+		return nil, xerrors.Errorf("invalid parent %s", namespacedName)
 	}
 	key := client.ObjectKey{
 		Namespace: namespacedName[0],
 		Name:      namespacedName[1],
 	}
 	parent = &contourv1.HTTPProxy{}
-	err = r.Get(ctx, key, parent)
+	err = r.Client.Get(ctx, key, parent)
 	return
 }
 
@@ -153,7 +154,7 @@ func (r *HTTPProxyReconciler) cleanupParentProxy(ctx context.Context, childProxy
 		return err
 	}
 	if parentProxy.Annotations[allowInclusionAnnotation] != "true" {
-		return fmt.Errorf("parent %s does not allow child inclusions", parentRef)
+		return xerrors.Errorf("parent %s does not allow child inclusions", parentRef)
 	}
 	includes := parentProxy.Spec.Includes
 	childIdx := r.findIncludeRef(includes, childProxy.ObjectMeta)
@@ -162,7 +163,7 @@ func (r *HTTPProxyReconciler) cleanupParentProxy(ctx context.Context, childProxy
 	}
 	includes = append(includes[:childIdx], includes[childIdx+1:]...)
 	parentProxy.Spec.Includes = includes
-	err = r.Update(ctx, parentProxy, &client.UpdateOptions{
+	err = r.Client.Update(ctx, parentProxy, &client.UpdateOptions{
 		FieldManager: "oyako",
 	})
 	if err != nil {
@@ -179,7 +180,7 @@ func (r *HTTPProxyReconciler) reconcileParentProxy(ctx context.Context, childPro
 		return false, err
 	}
 	if parentProxy.Annotations[allowInclusionAnnotation] != "true" {
-		return true, fmt.Errorf("parent %s does not allow child inclusions", parentRef)
+		return true, xerrors.Errorf("parent %s does not allow child inclusions", parentRef)
 	}
 	prefix := childProxy.Annotations[pathPrefixAnnotation]
 	if prefix == "" {
@@ -187,7 +188,7 @@ func (r *HTTPProxyReconciler) reconcileParentProxy(ctx context.Context, childPro
 	}
 	includes := parentProxy.Spec.Includes
 	if r.isPrefixDuplicate(includes, childProxy.ObjectMeta, prefix) {
-		return true, fmt.Errorf("duplicate prefix")
+		return true, xerrors.Errorf("duplicate prefix")
 	}
 	prefixCondition := []contourv1.MatchCondition{
 		{
@@ -206,7 +207,7 @@ func (r *HTTPProxyReconciler) reconcileParentProxy(ctx context.Context, childPro
 		}
 		parentProxy.Spec.Includes = append(parentProxy.Spec.Includes, include)
 	}
-	err = r.Update(ctx, parentProxy, &client.UpdateOptions{
+	err = r.Client.Update(ctx, parentProxy, &client.UpdateOptions{
 		FieldManager: "oyako",
 	})
 	if err != nil {
