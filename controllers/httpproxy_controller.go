@@ -41,7 +41,7 @@ const (
 
 // HTTPProxyReconciler reconciles a HTTPProxy object.
 type HTTPProxyReconciler struct {
-	client.Client
+	Client client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
@@ -59,7 +59,7 @@ func (r *HTTPProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		Namespace: req.Namespace,
 		Name:      req.Name,
 	}
-	err := r.Get(ctx, key, httpProxy)
+	err := r.Client.Get(ctx, key, httpProxy)
 	if apierrors.IsNotFound(err) {
 		return ctrl.Result{}, nil
 	}
@@ -73,7 +73,7 @@ func (r *HTTPProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if httpProxy.ObjectMeta.DeletionTimestamp.IsZero() {
 		if !r.hasFinalizer(httpProxy, finalizerName) {
 			controllerutil.AddFinalizer(httpProxy, finalizerName)
-			if err := r.Update(ctx, httpProxy); err != nil {
+			if err := r.Client.Update(ctx, httpProxy); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
@@ -83,7 +83,7 @@ func (r *HTTPProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				return ctrl.Result{}, err
 			}
 			controllerutil.RemoveFinalizer(httpProxy, finalizerName)
-			if err := r.Update(ctx, httpProxy); err != nil {
+			if err := r.Client.Update(ctx, httpProxy); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
@@ -120,7 +120,7 @@ func (r *HTTPProxyReconciler) getParentProxy(ctx context.Context, parentRef stri
 		Name:      namespacedName[1],
 	}
 	parent = &contourv1.HTTPProxy{}
-	err = r.Get(ctx, key, parent)
+	err = r.Client.Get(ctx, key, parent)
 	return
 }
 
@@ -163,7 +163,7 @@ func (r *HTTPProxyReconciler) cleanupParentProxy(ctx context.Context, childProxy
 	}
 	includes = append(includes[:childIdx], includes[childIdx+1:]...)
 	parentProxy.Spec.Includes = includes
-	err = r.Update(ctx, parentProxy, &client.UpdateOptions{
+	err = r.Client.Update(ctx, parentProxy, &client.UpdateOptions{
 		FieldManager: "oyako",
 	})
 	if err != nil {
@@ -207,7 +207,7 @@ func (r *HTTPProxyReconciler) reconcileParentProxy(ctx context.Context, childPro
 		}
 		parentProxy.Spec.Includes = append(parentProxy.Spec.Includes, include)
 	}
-	err = r.Update(ctx, parentProxy, &client.UpdateOptions{
+	err = r.Client.Update(ctx, parentProxy, &client.UpdateOptions{
 		FieldManager: "oyako",
 	})
 	if err != nil {
