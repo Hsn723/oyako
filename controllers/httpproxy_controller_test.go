@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	contourv1 "github.com/projectcontour/contour/apis/projectcontour/v1"
+	"golang.org/x/xerrors"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -76,7 +77,7 @@ func parentHasExpectedInclude(ctx context.Context, namespace, name, childNamespa
 	}
 
 	if !hasInclude(parent, childNamespace, childName, childPrefix) {
-		return fmt.Errorf("child is not included in parent")
+		return xerrors.Errorf("child is not included in parent")
 	}
 	return nil
 }
@@ -372,7 +373,7 @@ var _ = Describe("HTTPProxy controller", func() {
 				if parent.Spec.Includes == nil {
 					return nil
 				}
-				return fmt.Errorf("parent should not have any includes")
+				return xerrors.Errorf("parent should not have any includes")
 			}).Should(Succeed())
 		})
 	})

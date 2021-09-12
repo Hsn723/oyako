@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-logr/logr"
 	contourv1 "github.com/projectcontour/contour/apis/projectcontour/v1"
+	"golang.org/x/xerrors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -112,7 +113,7 @@ func (r *HTTPProxyReconciler) hasFinalizer(h *contourv1.HTTPProxy, finalizer str
 func (r *HTTPProxyReconciler) getParentProxy(ctx context.Context, parentRef string) (parent *contourv1.HTTPProxy, err error) {
 	namespacedName := strings.Split(parentRef, "/")
 	if len(namespacedName) != 2 {
-		return nil, fmt.Errorf("invalid parent %s", namespacedName)
+		return nil, xerrors.Errorf("invalid parent %s", namespacedName)
 	}
 	key := client.ObjectKey{
 		Namespace: namespacedName[0],
@@ -153,7 +154,7 @@ func (r *HTTPProxyReconciler) cleanupParentProxy(ctx context.Context, childProxy
 		return err
 	}
 	if parentProxy.Annotations[allowInclusionAnnotation] != "true" {
-		return fmt.Errorf("parent %s does not allow child inclusions", parentRef)
+		return xerrors.Errorf("parent %s does not allow child inclusions", parentRef)
 	}
 	includes := parentProxy.Spec.Includes
 	childIdx := r.findIncludeRef(includes, childProxy.ObjectMeta)
@@ -179,7 +180,7 @@ func (r *HTTPProxyReconciler) reconcileParentProxy(ctx context.Context, childPro
 		return false, err
 	}
 	if parentProxy.Annotations[allowInclusionAnnotation] != "true" {
-		return true, fmt.Errorf("parent %s does not allow child inclusions", parentRef)
+		return true, xerrors.Errorf("parent %s does not allow child inclusions", parentRef)
 	}
 	prefix := childProxy.Annotations[pathPrefixAnnotation]
 	if prefix == "" {
@@ -187,7 +188,7 @@ func (r *HTTPProxyReconciler) reconcileParentProxy(ctx context.Context, childPro
 	}
 	includes := parentProxy.Spec.Includes
 	if r.isPrefixDuplicate(includes, childProxy.ObjectMeta, prefix) {
-		return true, fmt.Errorf("duplicate prefix")
+		return true, xerrors.Errorf("duplicate prefix")
 	}
 	prefixCondition := []contourv1.MatchCondition{
 		{
