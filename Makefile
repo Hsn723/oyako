@@ -5,6 +5,7 @@ IMG ?= ghcr.io/hsn723/oyako:latest
 CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
 CONTOUR_VERSION := $(shell awk '/github.com\/projectcontour\/contour/ {print $$2}' go.mod)
 KUBERNETES_VERSION := 1.21
+CST_VERSION = 1.10.0
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -121,3 +122,13 @@ GOBIN=$(PROJECT_DIR)/bin go get $(2) ;\
 rm -rf $$TMP_DIR ;\
 }
 endef
+
+.PHONY: setup-container-structure-test
+setup-container-structure-test:
+	if [ -z "$(shell which container-structure-test)" ]; then \
+		curl -LO https://storage.googleapis.com/container-structure-test/v$(CST_VERSION)/container-structure-test-linux-amd64 && mv container-structure-test-linux-amd64 container-structure-test && chmod +x container-structure-test && sudo mv container-structure-test /usr/local/bin/; \
+	fi
+
+.PHONY: container-structure-test
+container-structure-test: setup-container-structure-test
+	printf "amd64\narm64" | xargs -n1 -I {} container-structure-test test --image ghcr.io/hsn723/oyako:$(shell git describe --tags --abbrev=0)-next-{} --config cst.yaml
