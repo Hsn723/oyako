@@ -64,7 +64,7 @@ crds:
 
 test: manifests generate fmt vet crds setup-envtest ## Run tests.
 	source <($(SETUP_ENVTEST) use -p env $(KUBERNETES_VERSION)); \
-		go test -race -v -count 1 ./...
+		go test -race -v -count 1 ./... -ginkgo.progress -ginkgo.v -ginkgo.failFast -coverprofile cover.out
 
 ##@ Build
 
