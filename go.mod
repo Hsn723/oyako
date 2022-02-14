@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/go-logr/logr v1.2.2
-	github.com/onsi/ginkgo/v2 v2.1.1
+	github.com/onsi/ginkgo/v2 v2.1.2
 	github.com/onsi/gomega v1.18.1
 	github.com/projectcontour/contour v1.20.0
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
